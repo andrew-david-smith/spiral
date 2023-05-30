@@ -52,6 +52,8 @@ class Token
     "LEFT_ARROW",
   ]
 
+  getter :type
+
   def initialize(@value : String, @type : String, @line_number : Int32, @begins : Int32, @ends : Int32)
     unless ALLOWED_TYPES.includes?(@type)
       raise "Parser Error: Unknown type #{@type}"

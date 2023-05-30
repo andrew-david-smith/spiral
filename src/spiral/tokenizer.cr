@@ -1,6 +1,6 @@
 require "./tokenizer_exception.cr"
 
-class Tokenizer
+class Spiral::Tokenizer
   getter tokens : Array(Token)
 
   def self.tokenize(input : String)
@@ -170,10 +170,10 @@ class Tokenizer
     start_index = @current_index
     @current_index += 1
 
-    if current_token == '='
+    if @input.size > @current_index && current_token == '='
       value += current_token
       @tokens << Token.new(value, "LTE", @line_number, start_index, @current_index)
-    elsif current_token == '-'
+    elsif @input.size > @current_index && current_token == '-'
       value += current_token
       @tokens << Token.new(value, "LEFT_ARROW", @line_number, start_index, @current_index)
     else
@@ -187,7 +187,7 @@ class Tokenizer
     start_index = @current_index
     @current_index += 1
 
-    if current_token == '='
+    if @input.size > @current_index && current_token == '='
       value += current_token
       @tokens << Token.new(value, "GTE", @line_number, start_index, @current_index)
     else
@@ -346,14 +346,16 @@ class Tokenizer
     start_index = @current_index
     @current_index += 1
 
-    while current_token.ascii_lowercase? || current_token == ':'
-      value += current_token
-      @current_index += 1
-      if (@current_index >= @input.size)
-        break
-      end
-      if current_token == ':'
-        break
+    if @input.size > @current_index
+      while current_token.ascii_lowercase? || current_token == ':'
+        value += current_token
+        @current_index += 1
+        if (@current_index >= @input.size)
+          break
+        end
+        if current_token == ':'
+          break
+        end
       end
     end
 
