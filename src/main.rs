@@ -1,9 +1,10 @@
 // use inkwell::context::Context;
 use std::error::Error;
+mod spiral_error;
 mod tokenizer;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let mut t = tokenizer::Tokenizer::build("'Really long unclosed string'");
+    let mut t = tokenizer::Tokenizer::build("'Really long unclosed string");
     let tokens = t.execute()?;
 
     for token in tokens {
