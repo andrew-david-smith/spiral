@@ -1,3 +1,65 @@
+use colored::Colorize;
+use std::error;
+use std::fmt;
+
+type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
+
+pub struct SpiralError<'a> {
+    error_text: &'a str,
+    help_text: &'a str,
+    file: String,
+    line_number: usize,
+    begin: usize,
+    end: usize,
+}
+
+impl<'a> fmt::Display for SpiralError<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.fmt_for_display())
+    }
+}
+
+impl<'a> fmt::Debug for SpiralError<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.fmt_for_display())
+    }
+}
+
+impl<'a> SpiralError<'a> {
+    fn fmt_for_display(&self) -> String {
+        format!(
+            "{}\n\nL{}: {}\n{}\n{}",
+            self.error_text.yellow(),
+            self.line_number,
+            self.problematic_code(),
+            self.error_display().red(),
+            self.help_text.green()
+        )
+    }
+
+    fn problematic_code(&self) -> String {
+        self.file
+            .lines()
+            .nth(self.line_number - 1)
+            .unwrap()
+            .to_string()
+    }
+
+    fn error_display(&self) -> String {
+        format!(
+            "{}{}",
+            " ".repeat(self.begin + 3 + self.length_of_line_number()),
+            "^".repeat(self.end - self.begin + 1)
+        )
+    }
+
+    fn length_of_line_number(&self) -> usize {
+        format!("{}", self.line_number).len()
+    }
+}
+
+impl<'a> error::Error for SpiralError<'a> {}
+
 pub struct Tokenizer<'a> {
     input: &'a str,
     current_index: usize,
@@ -72,7 +134,7 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
-    pub fn execute(&mut self) -> Vec<Token> {
+    pub fn execute(&mut self) -> Result<Vec<Token>> {
         let mut tokens = Vec::new();
         while self.input.len() > self.current_index {
             let char = self.current_char();
@@ -82,13 +144,13 @@ impl<'a> Tokenizer<'a> {
             let unwrapped_char = char.unwrap();
 
             if unwrapped_char == '#' {
-                tokens.push(self.create_type_id());
+                tokens.push(self.create_type_id()?);
             } else if unwrapped_char == '@' {
-                tokens.push(self.create_namespace_id());
+                tokens.push(self.create_namespace_id()?);
             } else if unwrapped_char == '\'' {
-                tokens.push(self.create_char());
+                tokens.push(self.create_char()?);
             } else if unwrapped_char == '"' {
-                tokens.push(self.create_string());
+                tokens.push(self.create_string()?);
             } else if unwrapped_char == '[' {
                 tokens.push(Token {
                     value: unwrapped_char.to_string(),
@@ -120,9 +182,9 @@ impl<'a> Tokenizer<'a> {
                     token_type: TokenType::RightCurlyBracket,
                 });
             } else if unwrapped_char == '<' {
-                tokens.push(self.create_less_than());
+                tokens.push(self.create_less_than()?);
             } else if unwrapped_char == '>' {
-                tokens.push(self.create_greater_than());
+                tokens.push(self.create_greater_than()?);
             } else if unwrapped_char == '_' {
                 tokens.push(Token {
                     value: unwrapped_char.to_string(),
@@ -139,15 +201,15 @@ impl<'a> Tokenizer<'a> {
                     token_type: TokenType::Colon,
                 });
             } else if unwrapped_char == '|' {
-                tokens.push(self.create_from_or());
+                tokens.push(self.create_from_or()?);
             } else if unwrapped_char == '&' {
-                tokens.push(self.create_from_and());
+                tokens.push(self.create_from_and()?);
             } else if unwrapped_char == '=' {
-                tokens.push(self.create_from_equals());
+                tokens.push(self.create_from_equals()?);
             } else if unwrapped_char == '!' {
-                tokens.push(self.create_from_not());
+                tokens.push(self.create_from_not()?);
             } else if unwrapped_char == '+' {
-                tokens.push(self.create_from_plus());
+                tokens.push(self.create_from_plus()?);
             } else if unwrapped_char == '-' {
                 tokens.push(Token {
                     value: unwrapped_char.to_string(),
@@ -174,339 +236,427 @@ impl<'a> Tokenizer<'a> {
                     token_type: TokenType::Period,
                 });
             } else if unwrapped_char == ' ' {
-                tokens.push(self.create_whitespace());
+                tokens.push(self.create_whitespace()?);
             } else if matches!(unwrapped_char, '\n' | '\r') {
-                tokens.push(self.create_newlines());
+                tokens.push(self.create_newlines()?);
             } else if unwrapped_char.is_ascii_uppercase() {
-                tokens.push(self.create_function_id());
+                tokens.push(self.create_function_id()?);
             } else if unwrapped_char.is_ascii_lowercase() {
-                tokens.push(self.create_word());
+                tokens.push(self.create_word()?);
             } else if unwrapped_char.is_ascii_digit() {
-                tokens.push(self.create_number());
+                tokens.push(self.create_number()?);
+            } else {
+                return Err(Box::new(SpiralError {
+                    error_text: "Unable to parse character",
+                    help_text: "",
+                    file: self.input.to_string(),
+                    begin: self.current_index,
+                    end: self.current_index,
+                    line_number: self.line_number,
+                }));
             }
 
             self.current_index += 1;
         }
-        return tokens;
+        return Ok(tokens);
     }
 
     fn current_char(&self) -> Option<char> {
         self.input.chars().nth(self.current_index)
     }
 
-    fn create_type_id(&mut self) -> Token {
+    fn create_type_id(&mut self) -> Result<Token> {
         let mut value = self.current_char().unwrap().to_string();
+        let begin_index = self.current_index;
         self.current_index += 1;
 
-        let mut char = self.current_char();
-        if char.is_none() {
-            panic!("'#' must be followed by a capital letter");
-        }
-        let mut unwrapped_char = char.unwrap();
+        let mut char = self.current_char().ok_or(SpiralError {
+            error_text: "'#' must be followed by a capital letter",
+            help_text: "",
+            file: self.input.to_string(),
+            begin: begin_index,
+            end: begin_index,
+            line_number: self.line_number,
+        })?;
 
-        if !unwrapped_char.is_ascii_uppercase() {
-            panic!("Type must begin with a capital letter");
+        if !char.is_ascii_uppercase() {
+            return Err(Box::new(SpiralError {
+                error_text: "Type must begin with capital letter",
+                help_text: "",
+                file: self.input.to_string(),
+                begin: begin_index,
+                end: self.current_index,
+                line_number: self.line_number,
+            }));
         }
 
-        while unwrapped_char.is_ascii_uppercase() || unwrapped_char.is_ascii_lowercase() {
-            value += &unwrapped_char.to_string();
+        while char.is_ascii_uppercase() || char.is_ascii_lowercase() {
+            value += &char.to_string();
             self.current_index += 1;
-            char = self.current_char();
-            if char.is_none() {
+            let char_result = self.current_char();
+            if char_result.is_none() {
                 break;
             }
-            unwrapped_char = char.unwrap();
+            char = char_result.unwrap();
         }
 
         self.current_index -= 1;
-        Token {
+        Ok(Token {
             value,
             token_type: TokenType::TypeId,
-        }
+        })
     }
 
-    fn create_namespace_id(&mut self) -> Token {
+    fn create_namespace_id(&mut self) -> Result<Token> {
         let mut value = self.current_char().unwrap().to_string();
+        let begin_index = self.current_index;
         self.current_index += 1;
 
-        let mut char = self.current_char();
-        if char.is_none() {
-            panic!("'@' must be followed by a capital letter");
-        }
-        let mut unwrapped_char = char.unwrap();
+        let mut char = self.current_char().ok_or(SpiralError {
+            error_text: "'@' must be followed by a capital letter",
+            help_text: "",
+            file: self.input.to_string(),
+            begin: begin_index,
+            end: begin_index,
+            line_number: self.line_number,
+        })?;
 
-        if !unwrapped_char.is_ascii_uppercase() {
-            panic!("Namespace must begin with a capital letter");
+        if !char.is_ascii_uppercase() {
+            return Err(Box::new(SpiralError {
+                error_text: "Namespace must begin with capital letter",
+                help_text: "",
+                file: self.input.to_string(),
+                begin: begin_index,
+                end: self.current_index,
+                line_number: self.line_number,
+            }));
         }
 
-        while unwrapped_char.is_ascii_uppercase() || unwrapped_char.is_ascii_lowercase() {
-            value += &unwrapped_char.to_string();
+        while char.is_ascii_uppercase() || char.is_ascii_lowercase() {
+            value += &char.to_string();
             self.current_index += 1;
-            char = self.current_char();
-            if char.is_none() {
+            let char_result = self.current_char();
+            if char_result.is_none() {
                 break;
             }
-            unwrapped_char = char.unwrap();
+            char = char_result.unwrap();
         }
 
         self.current_index -= 1;
-        Token {
+        Ok(Token {
             value,
             token_type: TokenType::NamespaceId,
-        }
+        })
     }
 
-    fn create_char(&mut self) -> Token {
+    fn create_char(&mut self) -> Result<Token> {
         let mut value = String::from("");
+        let begin_index = self.current_index;
         self.current_index += 1;
 
-        let mut char = self.current_char();
-        if char.is_none() {
-            // Raise error
-        }
-        let mut unwrapped_char = char.unwrap();
+        let mut char = self.current_char().ok_or(SpiralError {
+            error_text: "Char must be closed",
+            help_text: "",
+            file: self.input.to_string(),
+            begin: begin_index,
+            end: begin_index,
+            line_number: self.line_number,
+        })?;
 
-        while !(unwrapped_char == '\''
-            && self.input.chars().nth(self.current_index - 1).unwrap() != '\\')
-        {
-            value += &unwrapped_char.to_string();
+        while !(char == '\'' && self.input.chars().nth(self.current_index - 1).unwrap() != '\\') {
+            value += &char.to_string();
             self.current_index += 1;
-            char = self.current_char();
-            if char.is_none() {
+            let char_result = self.current_char();
+            if char_result.is_none() {
                 break;
             }
-            unwrapped_char = char.unwrap();
+            char = char_result.unwrap();
         }
 
-        Token {
-            value,
-            token_type: TokenType::Char,
+        if char != '\'' {
+            Err(Box::new(SpiralError {
+                error_text: "Char must be closed",
+                help_text: "",
+                file: self.input.to_string(),
+                begin: begin_index,
+                end: self.current_index,
+                line_number: self.line_number,
+            }))
+        } else {
+            Ok(Token {
+                value,
+                token_type: TokenType::Char,
+            })
         }
     }
 
-    fn create_string(&mut self) -> Token {
+    fn create_string(&mut self) -> Result<Token> {
         let mut value = String::from("");
+        let begin_index = self.current_index;
         self.current_index += 1;
 
-        let mut char = self.current_char();
-        if char.is_none() {
-            // Raise error
-        }
-        let mut unwrapped_char = char.unwrap();
+        let mut char = self.current_char().ok_or(SpiralError {
+            error_text: "String must be closed",
+            help_text: "",
+            file: self.input.to_string(),
+            begin: begin_index,
+            end: begin_index,
+            line_number: self.line_number,
+        })?;
 
-        while !(unwrapped_char == '"'
-            && self.input.chars().nth(self.current_index - 1).unwrap() != '\\')
-        {
-            value += &unwrapped_char.to_string();
+        while !(char == '"' && self.input.chars().nth(self.current_index - 1).unwrap() != '\\') {
+            value += &char.to_string();
             self.current_index += 1;
-            char = self.current_char();
-            if char.is_none() {
+            let char_result = self.current_char();
+            if char_result.is_none() {
                 break;
             }
-            unwrapped_char = char.unwrap();
+            char = char_result.unwrap();
         }
 
-        Token {
-            value,
-            token_type: TokenType::String,
+        if char != '"' {
+            Err(Box::new(SpiralError {
+                error_text: "String must be closed",
+                help_text: "",
+                file: self.input.to_string(),
+                begin: begin_index,
+                end: self.current_index,
+                line_number: self.line_number,
+            }))
+        } else {
+            Ok(Token {
+                value,
+                token_type: TokenType::String,
+            })
         }
     }
 
-    fn create_less_than(&mut self) -> Token {
+    fn create_less_than(&mut self) -> Result<Token> {
         let mut value = self.current_char().unwrap().to_string();
         self.current_index += 1;
 
         let char = self.current_char();
         if char.is_none() {
-            return Token {
+            return Ok(Token {
                 value,
                 token_type: TokenType::LessThan,
-            };
+            });
         }
         let unwrapped_char = char.unwrap();
 
         if unwrapped_char == '=' {
             value += &unwrapped_char.to_string();
-            Token {
+            Ok(Token {
                 value,
                 token_type: TokenType::LessThanEquals,
-            }
+            })
         } else if unwrapped_char == '-' {
             value += &unwrapped_char.to_string();
-            Token {
+            Ok(Token {
                 value,
                 token_type: TokenType::LeftArrow,
-            }
+            })
         } else {
             self.current_index -= 1;
-            Token {
+            Ok(Token {
                 value,
                 token_type: TokenType::LessThan,
-            }
+            })
         }
     }
 
-    fn create_greater_than(&mut self) -> Token {
+    fn create_greater_than(&mut self) -> Result<Token> {
         let mut value = self.current_char().unwrap().to_string();
         self.current_index += 1;
 
         let char = self.current_char();
         if char.is_none() {
-            return Token {
+            return Ok(Token {
                 value,
                 token_type: TokenType::GreaterThan,
-            };
+            });
         }
         let unwrapped_char = char.unwrap();
 
         if unwrapped_char == '=' {
             value += &unwrapped_char.to_string();
-            Token {
+            Ok(Token {
                 value,
                 token_type: TokenType::GreaterThanEquals,
-            }
+            })
         } else {
             self.current_index -= 1;
-            Token {
+            Ok(Token {
                 value,
                 token_type: TokenType::GreaterThan,
-            }
+            })
         }
     }
 
-    fn create_from_or(&mut self) -> Token {
+    fn create_from_or(&mut self) -> Result<Token> {
         let mut value = self.current_char().unwrap().to_string();
+        let begin_index = self.current_index;
         self.current_index += 1;
 
-        let char = self.current_char();
-        if char.is_none() {
-            // Raise error
-        }
-        let unwrapped_char = char.unwrap();
+        let char = self.current_char().ok_or(SpiralError {
+            error_text: "Unknown Character: '|'",
+            help_text: "",
+            file: self.input.to_string(),
+            begin: begin_index,
+            end: begin_index,
+            line_number: self.line_number,
+        })?;
 
-        if unwrapped_char == '|' {
-            value += &unwrapped_char.to_string();
-            Token {
+        if char == '|' {
+            value += &char.to_string();
+            Ok(Token {
                 value,
                 token_type: TokenType::Or,
-            }
-        } else if unwrapped_char == '>' {
-            value += &unwrapped_char.to_string();
-            Token {
+            })
+        } else if char == '>' {
+            value += &char.to_string();
+            Ok(Token {
                 value,
                 token_type: TokenType::Flow,
-            }
+            })
         } else {
-            panic!("");
+            Err(Box::new(SpiralError {
+                error_text: "Unknown Character: '|'",
+                help_text: "",
+                file: self.input.to_string(),
+                begin: begin_index,
+                end: begin_index,
+                line_number: self.line_number,
+            }))
         }
     }
 
-    fn create_from_and(&mut self) -> Token {
+    fn create_from_and(&mut self) -> Result<Token> {
         let mut value = self.current_char().unwrap().to_string();
+        let begin_index = self.current_index;
         self.current_index += 1;
 
-        let char = self.current_char();
-        if char.is_none() {
-            // Raise error
-        }
-        let unwrapped_char = char.unwrap();
+        let char = self.current_char().ok_or(SpiralError {
+            error_text: "Unknown Character: '&'",
+            help_text: "",
+            file: self.input.to_string(),
+            begin: begin_index,
+            end: begin_index,
+            line_number: self.line_number,
+        })?;
 
-        if unwrapped_char == '&' {
-            value += &unwrapped_char.to_string();
-            Token {
+        if char == '&' {
+            value += &char.to_string();
+            Ok(Token {
                 value,
                 token_type: TokenType::And,
-            }
+            })
         } else {
-            panic!("");
+            Err(Box::new(SpiralError {
+                error_text: "Unknown Character: '&'",
+                help_text: "",
+                file: self.input.to_string(),
+                begin: begin_index,
+                end: begin_index,
+                line_number: self.line_number,
+            }))
         }
     }
 
-    fn create_from_equals(&mut self) -> Token {
+    fn create_from_equals(&mut self) -> Result<Token> {
         let mut value = self.current_char().unwrap().to_string();
         self.current_index += 1;
 
         let char = self.current_char();
         if char.is_none() {
-            // Raise error
-        }
-        let unwrapped_char = char.unwrap();
-
-        if unwrapped_char == '=' {
-            value += &unwrapped_char.to_string();
-            Token {
-                value,
-                token_type: TokenType::DoubleEquals,
-            }
-        } else {
-            self.current_index -= 1;
-            Token {
+            return Ok(Token {
                 value,
                 token_type: TokenType::Equals,
-            }
-        }
-    }
-
-    fn create_from_not(&mut self) -> Token {
-        let mut value = self.current_char().unwrap().to_string();
-        self.current_index += 1;
-
-        let char = self.current_char();
-        if char.is_none() {
-            // Raise error
+            });
         }
         let unwrapped_char = char.unwrap();
 
         if unwrapped_char == '=' {
             value += &unwrapped_char.to_string();
-            Token {
+            Ok(Token {
                 value,
-                token_type: TokenType::NotEquals,
-            }
+                token_type: TokenType::DoubleEquals,
+            })
         } else {
             self.current_index -= 1;
-            Token {
+            Ok(Token {
                 value,
-                token_type: TokenType::Not,
-            }
+                token_type: TokenType::Equals,
+            })
         }
     }
 
-    fn create_from_plus(&mut self) -> Token {
+    fn create_from_not(&mut self) -> Result<Token> {
         let mut value = self.current_char().unwrap().to_string();
         self.current_index += 1;
 
         let char = self.current_char();
         if char.is_none() {
-            // Raise error
+            return Ok(Token {
+                value,
+                token_type: TokenType::Not,
+            });
+        }
+        let unwrapped_char = char.unwrap();
+
+        if unwrapped_char == '=' {
+            value += &unwrapped_char.to_string();
+            Ok(Token {
+                value,
+                token_type: TokenType::NotEquals,
+            })
+        } else {
+            self.current_index -= 1;
+            Ok(Token {
+                value,
+                token_type: TokenType::Not,
+            })
+        }
+    }
+
+    fn create_from_plus(&mut self) -> Result<Token> {
+        let mut value = self.current_char().unwrap().to_string();
+        self.current_index += 1;
+
+        let char = self.current_char();
+        if char.is_none() {
+            return Ok(Token {
+                value,
+                token_type: TokenType::Plus,
+            });
         }
         let unwrapped_char = char.unwrap();
 
         if unwrapped_char == '+' {
             value += &unwrapped_char.to_string();
-            Token {
+            Ok(Token {
                 value,
                 token_type: TokenType::DoublePlus,
-            }
+            })
         } else {
             self.current_index -= 1;
-            Token {
+            Ok(Token {
                 value,
                 token_type: TokenType::Plus,
-            }
+            })
         }
     }
 
-    fn create_whitespace(&mut self) -> Token {
+    fn create_whitespace(&mut self) -> Result<Token> {
         let mut value = self.current_char().unwrap().to_string();
         self.current_index += 1;
 
         let mut char = self.current_char();
         if char.is_none() {
-            return Token {
+            return Ok(Token {
                 value,
                 token_type: TokenType::Whitespace,
-            };
+            });
         }
         let mut unwrapped_char = char.unwrap();
 
@@ -521,23 +671,23 @@ impl<'a> Tokenizer<'a> {
         }
 
         self.current_index -= 1;
-        Token {
+        Ok(Token {
             value,
             token_type: TokenType::Whitespace,
-        }
+        })
     }
 
-    fn create_newlines(&mut self) -> Token {
+    fn create_newlines(&mut self) -> Result<Token> {
         let mut value = self.current_char().unwrap().to_string();
         self.current_index += 1;
         self.line_number += 1;
 
         let mut char = self.current_char();
         if char.is_none() {
-            return Token {
+            return Ok(Token {
                 value,
                 token_type: TokenType::Newline,
-            };
+            });
         }
         let mut unwrapped_char = char.unwrap();
 
@@ -552,19 +702,22 @@ impl<'a> Tokenizer<'a> {
         }
 
         self.current_index -= 1;
-        Token {
+        Ok(Token {
             value,
             token_type: TokenType::Newline,
-        }
+        })
     }
 
-    fn create_function_id(&mut self) -> Token {
+    fn create_function_id(&mut self) -> Result<Token> {
         let mut value = self.current_char().unwrap().to_string();
         self.current_index += 1;
 
         let mut char = self.current_char();
         if char.is_none() {
-            // Raise error
+            return Ok(Token {
+                value,
+                token_type: TokenType::FunctionId,
+            });
         }
         let mut unwrapped_char = char.unwrap();
 
@@ -579,22 +732,22 @@ impl<'a> Tokenizer<'a> {
         }
 
         self.current_index -= 1;
-        Token {
+        Ok(Token {
             value,
             token_type: TokenType::FunctionId,
-        }
+        })
     }
 
-    fn create_word(&mut self) -> Token {
+    fn create_word(&mut self) -> Result<Token> {
         let mut value = self.current_char().unwrap().to_string();
         self.current_index += 1;
 
         let mut char = self.current_char();
         if char.is_none() {
-            return Token {
+            return Ok(Token {
                 value,
                 token_type: TokenType::VariableId,
-            };
+            });
         }
         let mut unwrapped_char = char.unwrap();
 
@@ -604,10 +757,10 @@ impl<'a> Tokenizer<'a> {
         {
             value += &unwrapped_char.to_string();
             if unwrapped_char == ':' {
-                return Token {
+                return Ok(Token {
                     value,
                     token_type: TokenType::FieldId,
-                };
+                });
             }
 
             self.current_index += 1;
@@ -620,79 +773,80 @@ impl<'a> Tokenizer<'a> {
 
         self.current_index -= 1;
         if value == "namespace" {
-            Token {
+            Ok(Token {
                 value,
                 token_type: TokenType::KeywordNamespace,
-            }
+            })
         } else if value == "exposing" {
-            Token {
+            Ok(Token {
                 value,
                 token_type: TokenType::KeywordExposing,
-            }
+            })
         } else if value == "import" {
-            Token {
+            Ok(Token {
                 value,
                 token_type: TokenType::KeywordImport,
-            }
+            })
         } else if value == "let" {
-            Token {
+            Ok(Token {
                 value,
                 token_type: TokenType::KeywordLet,
-            }
+            })
         } else if value == "in" {
-            Token {
+            Ok(Token {
                 value,
                 token_type: TokenType::KeywordIn,
-            }
+            })
         } else if value == "if" {
-            Token {
+            Ok(Token {
                 value,
                 token_type: TokenType::KeywordIf,
-            }
+            })
         } else if value == "else" {
-            Token {
+            Ok(Token {
                 value,
                 token_type: TokenType::KeywordElse,
-            }
+            })
         } else if value == "match" {
-            Token {
+            Ok(Token {
                 value,
                 token_type: TokenType::KeywordMatch,
-            }
+            })
         } else if value == "when" {
-            Token {
+            Ok(Token {
                 value,
                 token_type: TokenType::KeywordWhen,
-            }
+            })
         } else if value == "true" {
-            Token {
+            Ok(Token {
                 value,
                 token_type: TokenType::KeywordTrue,
-            }
+            })
         } else if value == "false" {
-            Token {
+            Ok(Token {
                 value,
                 token_type: TokenType::KeywordFalse,
-            }
+            })
         } else {
-            Token {
+            Ok(Token {
                 value,
                 token_type: TokenType::VariableId,
-            }
+            })
         }
     }
 
-    fn create_number(&mut self) -> Token {
+    fn create_number(&mut self) -> Result<Token> {
         let mut value = self.current_char().unwrap().to_string();
+        let begin_index = self.current_index;
         self.current_index += 1;
         let mut period_used = false;
 
         let mut char = self.current_char();
         if char.is_none() {
-            return Token {
+            return Ok(Token {
                 value,
                 token_type: TokenType::Integer,
-            };
+            });
         }
         let mut unwrapped_char = char.unwrap();
 
@@ -701,7 +855,14 @@ impl<'a> Tokenizer<'a> {
                 if !period_used {
                     period_used = true;
                 } else {
-                    panic!("Number contains multiple periods");
+                    return Err(Box::new(SpiralError {
+                        error_text: "Number contains multiple periods",
+                        help_text: "Ensure the number has a maximum of one period",
+                        file: self.input.to_string(),
+                        begin: begin_index,
+                        end: begin_index,
+                        line_number: self.line_number,
+                    }));
                 }
             }
 
@@ -716,15 +877,15 @@ impl<'a> Tokenizer<'a> {
 
         self.current_index -= 1;
         if period_used {
-            Token {
+            Ok(Token {
                 value,
                 token_type: TokenType::Float,
-            }
+            })
         } else {
-            Token {
+            Ok(Token {
                 value,
                 token_type: TokenType::Integer,
-            }
+            })
         }
     }
 }
@@ -733,7 +894,7 @@ impl<'a> Tokenizer<'a> {
 mod tests {
     #[test]
     fn namespaces_should_parse_with_specific_exposes() {
-        let result = parse("namespace @Maths exposing [Function variable #Type]");
+        let result = parse("namespace @Maths exposing [Function variable #Type]").unwrap();
         let expected = vec![
             "KeywordNamespace",
             "Whitespace",
@@ -754,7 +915,7 @@ mod tests {
 
     #[test]
     fn namespaces_should_parse_with_wildcard_exposes() {
-        let result = parse("namespace @Maths exposing _");
+        let result = parse("namespace @Maths exposing _").unwrap();
         let expected = vec![
             "KeywordNamespace",
             "Whitespace",
@@ -769,14 +930,14 @@ mod tests {
 
     #[test]
     fn imports_should_parse_with_no_specific_imports() {
-        let result = parse("import @Maths");
+        let result = parse("import @Maths").unwrap();
         let expected = vec!["KeywordImport", "Whitespace", "NamespaceId"];
         assert_eq!(result, expected);
     }
 
     #[test]
     fn imports_should_parse_with_specific_imports() {
-        let result = parse("import @Maths exposing [Function variable #Type]");
+        let result = parse("import @Maths exposing [Function variable #Type]").unwrap();
         let expected = vec![
             "KeywordImport",
             "Whitespace",
@@ -797,7 +958,7 @@ mod tests {
 
     #[test]
     fn function_definitions_should_parse_function_type_definition() {
-        let result = parse("AddTwo : #Fn<#Int,#Int>");
+        let result = parse("AddTwo : #Fn<#Int,#Int>").unwrap();
         let expected = vec![
             "FunctionId",
             "Whitespace",
@@ -815,7 +976,7 @@ mod tests {
 
     #[test]
     fn function_definitions_should_parse_function_definition() {
-        let result = parse("Main = @IO.Print(AddTwo 3)");
+        let result = parse("Main = @IO.Print(AddTwo 3)").unwrap();
         let expected = vec![
             "FunctionId",
             "Whitespace",
@@ -835,7 +996,7 @@ mod tests {
 
     #[test]
     fn type_definitions_should_parse_type_definitions() {
-        let result = parse("#Number = #Int || #Float");
+        let result = parse("#Number = #Int || #Float").unwrap();
         let expected = vec![
             "TypeId",
             "Whitespace",
@@ -852,7 +1013,7 @@ mod tests {
 
     #[test]
     fn literals_should_parse_booleans() {
-        let result = parse("true || false");
+        let result = parse("true || false").unwrap();
         let expected = vec![
             "KeywordTrue",
             "Whitespace",
@@ -865,28 +1026,28 @@ mod tests {
 
     #[test]
     fn literals_should_parse_integers() {
-        let result = parse("2 + 7");
+        let result = parse("2 + 7").unwrap();
         let expected = vec!["Integer", "Whitespace", "Plus", "Whitespace", "Integer"];
         assert_eq!(result, expected);
     }
 
     #[test]
     fn literals_should_parse_floats() {
-        let result = parse("3.14 + 4.9");
+        let result = parse("3.14 + 4.9").unwrap();
         let expected = vec!["Float", "Whitespace", "Plus", "Whitespace", "Float"];
         assert_eq!(result, expected);
     }
 
     #[test]
     fn literals_should_parse_characters_and_strings() {
-        let result = parse("'a' ++ \"hello\"");
+        let result = parse("'a' ++ \"hello\"").unwrap();
         let expected = vec!["Char", "Whitespace", "DoublePlus", "Whitespace", "String"];
         assert_eq!(result, expected);
     }
 
     #[test]
     fn literals_should_parse_lists() {
-        let result = parse("[1 2 3]");
+        let result = parse("[1 2 3]").unwrap();
         let expected = vec![
             "LeftSquareBracket",
             "Integer",
@@ -902,7 +1063,8 @@ mod tests {
     #[test]
     fn should_parse_a_let_statement() {
         let result =
-            parse("let\n  twentyFour = 3 * 8\n  sixteen = 4 ^ 2\nin\n  twentyFour + sixteen");
+            parse("let\n  twentyFour = 3 * 8\n  sixteen = 4 ^ 2\nin\n  twentyFour + sixteen")
+                .unwrap();
         let expected = vec![
             "KeywordLet",
             "Newline",
@@ -942,7 +1104,7 @@ mod tests {
 
     #[test]
     fn should_parse_an_if_statement_without_else_if_clause() {
-        let result = parse("if key == 40\n  n + 1\nelse\n  n");
+        let result = parse("if key == 40\n  n + 1\nelse\n  n").unwrap();
         let expected = vec![
             "KeywordIf",
             "Whitespace",
@@ -969,7 +1131,7 @@ mod tests {
 
     #[test]
     fn should_parse_an_if_statement_with_an_else_if_clause() {
-        let result = parse("if key == 40\n  n + 1\nelse if key == 38\n  n - 1\nelse\n  n");
+        let result = parse("if key == 40\n  n + 1\nelse if key == 38\n  n - 1\nelse\n  n").unwrap();
         let expected = vec![
             "KeywordIf",
             "Whitespace",
@@ -1013,7 +1175,7 @@ mod tests {
 
     #[test]
     fn should_parse_a_case_statement_without_a_when_clause() {
-        let result = parse("match n\nelse\n  1");
+        let result = parse("match n\nelse\n  1").unwrap();
         let expected = vec![
             "KeywordMatch",
             "Whitespace",
@@ -1029,7 +1191,8 @@ mod tests {
 
     #[test]
     fn should_parse_a_case_statement_with_a_when_clause() {
-        let result = parse("match n\nwhen 0\n  1\nwhen 1\n  1\nelse\n  Fib(n-1) + Fib(n-2)");
+        let result =
+            parse("match n\nwhen 0\n  1\nwhen 1\n  1\nelse\n  Fib(n-1) + Fib(n-2)").unwrap();
         let expected = vec![
             "KeywordMatch",
             "Whitespace",
@@ -1073,7 +1236,7 @@ mod tests {
 
     #[test]
     fn bin_ops_should_parse_math_operators() {
-        let result = parse("1 + 2 - 3 * 4 / 5 ^ 6");
+        let result = parse("1 + 2 - 3 * 4 / 5 ^ 6").unwrap();
         let expected = vec![
             "Integer",
             "Whitespace",
@@ -1102,7 +1265,7 @@ mod tests {
 
     #[test]
     fn bin_ops_should_parse_boolean_operators() {
-        let result = parse("!true || false && true");
+        let result = parse("!true || false && true").unwrap();
         let expected = vec![
             "Not",
             "KeywordTrue",
@@ -1120,21 +1283,21 @@ mod tests {
 
     #[test]
     fn bin_ops_should_parse_flow_operator() {
-        let result = parse("\"Hello\" |> Output");
+        let result = parse("\"Hello\" |> Output").unwrap();
         let expected = vec!["String", "Whitespace", "Flow", "Whitespace", "FunctionId"];
         assert_eq!(result, expected);
     }
 
     #[test]
     fn bin_ops_should_parse_concatinate_operator() {
-        let result = parse("' ' ++ \"Hello\"");
+        let result = parse("' ' ++ \"Hello\"").unwrap();
         let expected = vec!["Char", "Whitespace", "DoublePlus", "Whitespace", "String"];
         assert_eq!(result, expected);
     }
 
     #[test]
     fn structs_should_parse_struct_type_definition() {
-        let result = parse("#MyStruct = #Struct<x: #Int, y: #Int>");
+        let result = parse("#MyStruct = #Struct<x: #Int, y: #Int>").unwrap();
         let expected = vec![
             "TypeId",
             "Whitespace",
@@ -1157,7 +1320,7 @@ mod tests {
 
     #[test]
     fn structs_should_parse_struct_creation() {
-        let result = parse("point = { x: 3, y: 4 }");
+        let result = parse("point = { x: 3, y: 4 }").unwrap();
         let expected = vec![
             "VariableId",
             "Whitespace",
@@ -1181,7 +1344,7 @@ mod tests {
 
     #[test]
     fn structs_should_parse_field_access() {
-        let result = parse("point.x == 3");
+        let result = parse("point.x == 3").unwrap();
         let expected = vec![
             "VariableId",
             "Period",
@@ -1196,7 +1359,7 @@ mod tests {
 
     #[test]
     fn structs_should_parse_struct_editing() {
-        let result = parse("{ point <- x: point.x + 1, y: point.y + 1 }");
+        let result = parse("{ point <- x: point.x + 1, y: point.y + 1 }").unwrap();
         let expected = vec![
             "LeftCurlyBracket",
             "Whitespace",
@@ -1232,7 +1395,7 @@ mod tests {
 
     #[test]
     fn should_parse_new_lines() {
-        let result = parse("Main = @IO.Print\n  \"Hello World!\"");
+        let result = parse("Main = @IO.Print\n  \"Hello World!\"").unwrap();
         let expected = vec![
             "FunctionId",
             "Whitespace",
@@ -1249,30 +1412,60 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
     fn should_raise_error_if_namespace_does_not_begin_with_a_capital_letter() {
-        parse("@io.Print");
+        let result = parse("@io.Print");
+        assert_eq!(result.is_err(), true);
     }
 
     #[test]
-    #[should_panic]
     fn should_raise_error_if_type_does_not_begin_with_a_capital_letter() {
-        parse("#type");
+        let result = parse("#type");
+        assert_eq!(result.is_err(), true);
     }
 
     #[test]
-    #[should_panic]
-    fn should_raise_error_for_unknown_token() {
-        parse("true | false");
+    fn should_raise_error_for_unknown_or_token() {
+        let result = parse("true | false");
+        assert_eq!(result.is_err(), true);
     }
 
-    fn parse(input: &str) -> Vec<String> {
+    #[test]
+    fn should_raise_error_for_unknown_and_token() {
+        let result = parse("true & false");
+        assert_eq!(result.is_err(), true);
+    }
+
+    #[test]
+    fn should_raise_error_for_unknown_other_token() {
+        let result = parse("true $ false");
+        assert_eq!(result.is_err(), true);
+    }
+
+    #[test]
+    fn should_raise_error_for_unclosed_string() {
+        let result = parse("\"unclosed string");
+        assert_eq!(result.is_err(), true);
+    }
+
+    #[test]
+    fn should_raise_error_for_unclosed_char() {
+        let result = parse("'c");
+        assert_eq!(result.is_err(), true);
+    }
+
+    #[test]
+    fn should_raise_error_for_invalid_floats() {
+        let result = parse("3.14.6");
+        assert_eq!(result.is_err(), true);
+    }
+
+    fn parse(input: &str) -> super::Result<Vec<String>> {
         let mut t = super::Tokenizer::build(input);
-        let tokens = t.execute();
+        let tokens = t.execute()?;
         let mut output = Vec::new();
         for token in tokens {
             output.push(format!("{:?}", token.token_type));
         }
-        output
+        Ok(output)
     }
 }

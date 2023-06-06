@@ -3,8 +3,8 @@ use std::error::Error;
 mod tokenizer;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let mut t = tokenizer::Tokenizer::build("{ x: 5, y: 5}");
-    let tokens = t.execute();
+    let mut t = tokenizer::Tokenizer::build("'Really long unclosed string'");
+    let tokens = t.execute()?;
 
     for token in tokens {
         println!("{:?} - {}", token.token_type, token.value);
