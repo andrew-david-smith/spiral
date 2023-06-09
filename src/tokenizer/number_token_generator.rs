@@ -20,6 +20,10 @@ impl super::token_generator::TokenGenerator for NumberTokenGenerator {
             return Ok(super::Token {
                 value,
                 token_type: super::TokenType::Integer,
+                begin: begin_index,
+                end: tokenizer.current_index,
+                line_number: tokenizer.line_number,
+                line: tokenizer.current_line(),
             });
         }
         let mut unwrapped_char = char.unwrap();
@@ -32,7 +36,7 @@ impl super::token_generator::TokenGenerator for NumberTokenGenerator {
                     return Err(Box::new(super::SpiralError {
                         error_text: "Number contains multiple periods",
                         help_text: "Ensure the number has a maximum of one period",
-                        file: tokenizer.input.to_string(),
+                        line_text: tokenizer.current_line(),
                         begin: begin_index,
                         end: begin_index,
                         line_number: tokenizer.line_number,
@@ -54,11 +58,19 @@ impl super::token_generator::TokenGenerator for NumberTokenGenerator {
             Ok(super::Token {
                 value,
                 token_type: super::TokenType::Float,
+                begin: begin_index,
+                end: tokenizer.current_index,
+                line_number: tokenizer.line_number,
+                line: tokenizer.current_line(),
             })
         } else {
             Ok(super::Token {
                 value,
                 token_type: super::TokenType::Integer,
+                begin: begin_index,
+                end: tokenizer.current_index,
+                line_number: tokenizer.line_number,
+                line: tokenizer.current_line(),
             })
         }
     }

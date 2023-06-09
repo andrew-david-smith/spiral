@@ -17,7 +17,7 @@ impl super::token_generator::TokenGenerator for OrTokenGenerator {
         let char = tokenizer.current_char().ok_or(super::SpiralError {
             error_text: "Unknown Character: '|'",
             help_text: "",
-            file: tokenizer.input.to_string(),
+            line_text: tokenizer.current_line(),
             begin: begin_index,
             end: begin_index,
             line_number: tokenizer.line_number,
@@ -28,18 +28,26 @@ impl super::token_generator::TokenGenerator for OrTokenGenerator {
             Ok(super::Token {
                 value,
                 token_type: super::TokenType::Or,
+                begin: begin_index,
+                end: tokenizer.current_index,
+                line_number: tokenizer.line_number,
+                line: tokenizer.current_line(),
             })
         } else if char == '>' {
             value += &char.to_string();
             Ok(super::Token {
                 value,
                 token_type: super::TokenType::Flow,
+                begin: begin_index,
+                end: tokenizer.current_index,
+                line_number: tokenizer.line_number,
+                line: tokenizer.current_line(),
             })
         } else {
             Err(Box::new(super::SpiralError {
                 error_text: "Unknown Character: '|'",
                 help_text: "",
-                file: tokenizer.input.to_string(),
+                line_text: tokenizer.current_line(),
                 begin: begin_index,
                 end: begin_index,
                 line_number: tokenizer.line_number,

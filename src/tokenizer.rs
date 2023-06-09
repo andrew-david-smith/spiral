@@ -27,7 +27,7 @@ pub struct Tokenizer<'a> {
     pub line_number: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TokenType {
     KeywordNamespace,
     KeywordExposing,
@@ -81,9 +81,14 @@ pub enum TokenType {
     LeftArrow,
 }
 
+#[derive(Debug, Clone)]
 pub struct Token {
     pub value: String,
     pub token_type: TokenType,
+    pub begin: usize,
+    pub end: usize,
+    pub line_number: usize,
+    pub line: String,
 }
 
 impl<'a> Tokenizer<'a> {
@@ -117,7 +122,7 @@ impl<'a> Tokenizer<'a> {
                 return Err(Box::new(super::spiral_error::SpiralError {
                     error_text: "Unable to parse character",
                     help_text: "",
-                    file: self.input.to_string(),
+                    line_text: self.current_line(),
                     begin: self.current_index,
                     end: self.current_index,
                     line_number: self.line_number,
@@ -208,6 +213,14 @@ impl<'a> Tokenizer<'a> {
 
     pub fn current_char(&self) -> Option<char> {
         self.input.chars().nth(self.current_index)
+    }
+
+    pub fn current_line(&self) -> String {
+        self.input
+            .lines()
+            .nth(self.line_number - 1)
+            .unwrap()
+            .to_string()
     }
 }
 

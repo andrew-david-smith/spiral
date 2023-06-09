@@ -11,6 +11,7 @@ impl super::token_generator::TokenGenerator for GreaterThanTokenGenerator {
         tokenizer: &mut super::Tokenizer,
     ) -> super::Result<super::Token> {
         let mut value = tokenizer.current_char().unwrap().to_string();
+        let begin_index = tokenizer.current_index;
         tokenizer.current_index += 1;
 
         let char = tokenizer.current_char();
@@ -18,6 +19,10 @@ impl super::token_generator::TokenGenerator for GreaterThanTokenGenerator {
             return Ok(super::Token {
                 value,
                 token_type: super::TokenType::GreaterThan,
+                begin: begin_index,
+                end: tokenizer.current_index,
+                line_number: tokenizer.line_number,
+                line: tokenizer.current_line(),
             });
         }
         let unwrapped_char = char.unwrap();
@@ -27,12 +32,20 @@ impl super::token_generator::TokenGenerator for GreaterThanTokenGenerator {
             Ok(super::Token {
                 value,
                 token_type: super::TokenType::GreaterThanEquals,
+                begin: begin_index,
+                end: tokenizer.current_index,
+                line_number: tokenizer.line_number,
+                line: tokenizer.current_line(),
             })
         } else {
             tokenizer.current_index -= 1;
             Ok(super::Token {
                 value,
                 token_type: super::TokenType::GreaterThan,
+                begin: begin_index,
+                end: tokenizer.current_index,
+                line_number: tokenizer.line_number,
+                line: tokenizer.current_line(),
             })
         }
     }

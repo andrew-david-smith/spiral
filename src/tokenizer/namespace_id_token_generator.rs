@@ -17,7 +17,7 @@ impl super::token_generator::TokenGenerator for NamespaceIdTokenGenerator {
         let mut char = tokenizer.current_char().ok_or(super::SpiralError {
             error_text: "'@' must be followed by a capital letter",
             help_text: "",
-            file: tokenizer.input.to_string(),
+            line_text: tokenizer.current_line(),
             begin: begin_index,
             end: begin_index,
             line_number: tokenizer.line_number,
@@ -27,7 +27,7 @@ impl super::token_generator::TokenGenerator for NamespaceIdTokenGenerator {
             return Err(Box::new(super::SpiralError {
                 error_text: "Namespace must begin with capital letter",
                 help_text: "",
-                file: tokenizer.input.to_string(),
+                line_text: tokenizer.current_line(),
                 begin: begin_index,
                 end: tokenizer.current_index,
                 line_number: tokenizer.line_number,
@@ -48,6 +48,10 @@ impl super::token_generator::TokenGenerator for NamespaceIdTokenGenerator {
         Ok(super::Token {
             value,
             token_type: super::TokenType::NamespaceId,
+            begin: begin_index,
+            end: tokenizer.current_index,
+            line_number: tokenizer.line_number,
+            line: tokenizer.current_line(),
         })
     }
 }

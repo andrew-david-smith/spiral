@@ -11,6 +11,7 @@ impl super::token_generator::TokenGenerator for WordTokenGenerator {
         tokenizer: &mut super::Tokenizer,
     ) -> super::Result<super::Token> {
         let mut value = tokenizer.current_char().unwrap().to_string();
+        let begin_index = tokenizer.current_index;
         tokenizer.current_index += 1;
 
         let mut char = tokenizer.current_char();
@@ -18,6 +19,10 @@ impl super::token_generator::TokenGenerator for WordTokenGenerator {
             return Ok(super::Token {
                 value,
                 token_type: super::TokenType::VariableId,
+                begin: begin_index,
+                end: tokenizer.current_index,
+                line_number: tokenizer.line_number,
+                line: tokenizer.current_line(),
             });
         }
         let mut unwrapped_char = char.unwrap();
@@ -31,6 +36,10 @@ impl super::token_generator::TokenGenerator for WordTokenGenerator {
                 return Ok(super::Token {
                     value,
                     token_type: super::TokenType::FieldId,
+                    begin: begin_index,
+                    end: tokenizer.current_index,
+                    line_number: tokenizer.line_number,
+                    line: tokenizer.current_line(),
                 });
             }
 
@@ -47,61 +56,109 @@ impl super::token_generator::TokenGenerator for WordTokenGenerator {
             Ok(super::Token {
                 value,
                 token_type: super::TokenType::KeywordNamespace,
+                begin: begin_index,
+                end: tokenizer.current_index,
+                line_number: tokenizer.line_number,
+                line: tokenizer.current_line(),
             })
         } else if value == "exposing" {
             Ok(super::Token {
                 value,
                 token_type: super::TokenType::KeywordExposing,
+                begin: begin_index,
+                end: tokenizer.current_index,
+                line_number: tokenizer.line_number,
+                line: tokenizer.current_line(),
             })
         } else if value == "import" {
             Ok(super::Token {
                 value,
                 token_type: super::TokenType::KeywordImport,
+                begin: begin_index,
+                end: tokenizer.current_index,
+                line_number: tokenizer.line_number,
+                line: tokenizer.current_line(),
             })
         } else if value == "let" {
             Ok(super::Token {
                 value,
                 token_type: super::TokenType::KeywordLet,
+                begin: begin_index,
+                end: tokenizer.current_index,
+                line_number: tokenizer.line_number,
+                line: tokenizer.current_line(),
             })
         } else if value == "in" {
             Ok(super::Token {
                 value,
                 token_type: super::TokenType::KeywordIn,
+                begin: begin_index,
+                end: tokenizer.current_index,
+                line_number: tokenizer.line_number,
+                line: tokenizer.current_line(),
             })
         } else if value == "if" {
             Ok(super::Token {
                 value,
                 token_type: super::TokenType::KeywordIf,
+                begin: begin_index,
+                end: tokenizer.current_index,
+                line_number: tokenizer.line_number,
+                line: tokenizer.current_line(),
             })
         } else if value == "else" {
             Ok(super::Token {
                 value,
                 token_type: super::TokenType::KeywordElse,
+                begin: begin_index,
+                end: tokenizer.current_index,
+                line_number: tokenizer.line_number,
+                line: tokenizer.current_line(),
             })
         } else if value == "match" {
             Ok(super::Token {
                 value,
                 token_type: super::TokenType::KeywordMatch,
+                begin: begin_index,
+                end: tokenizer.current_index,
+                line_number: tokenizer.line_number,
+                line: tokenizer.current_line(),
             })
         } else if value == "when" {
             Ok(super::Token {
                 value,
                 token_type: super::TokenType::KeywordWhen,
+                begin: begin_index,
+                end: tokenizer.current_index,
+                line_number: tokenizer.line_number,
+                line: tokenizer.current_line(),
             })
         } else if value == "true" {
             Ok(super::Token {
                 value,
                 token_type: super::TokenType::KeywordTrue,
+                begin: begin_index,
+                end: tokenizer.current_index,
+                line_number: tokenizer.line_number,
+                line: tokenizer.current_line(),
             })
         } else if value == "false" {
             Ok(super::Token {
                 value,
                 token_type: super::TokenType::KeywordFalse,
+                begin: begin_index,
+                end: tokenizer.current_index,
+                line_number: tokenizer.line_number,
+                line: tokenizer.current_line(),
             })
         } else {
             Ok(super::Token {
                 value,
                 token_type: super::TokenType::VariableId,
+                begin: begin_index,
+                end: tokenizer.current_index,
+                line_number: tokenizer.line_number,
+                line: tokenizer.current_line(),
             })
         }
     }

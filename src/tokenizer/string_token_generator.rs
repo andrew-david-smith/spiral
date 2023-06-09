@@ -17,7 +17,7 @@ impl super::token_generator::TokenGenerator for StringTokenGenerator {
         let mut char = tokenizer.current_char().ok_or(super::SpiralError {
             error_text: "String must be closed",
             help_text: "",
-            file: tokenizer.input.to_string(),
+            line_text: tokenizer.current_line(),
             begin: begin_index,
             end: begin_index,
             line_number: tokenizer.line_number,
@@ -44,7 +44,7 @@ impl super::token_generator::TokenGenerator for StringTokenGenerator {
             Err(Box::new(super::SpiralError {
                 error_text: "String must be closed",
                 help_text: "",
-                file: tokenizer.input.to_string(),
+                line_text: tokenizer.current_line(),
                 begin: begin_index,
                 end: tokenizer.current_index,
                 line_number: tokenizer.line_number,
@@ -53,6 +53,10 @@ impl super::token_generator::TokenGenerator for StringTokenGenerator {
             Ok(super::Token {
                 value,
                 token_type: super::TokenType::String,
+                begin: begin_index,
+                end: tokenizer.current_index,
+                line_number: tokenizer.line_number,
+                line: tokenizer.current_line(),
             })
         }
     }

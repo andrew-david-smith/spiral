@@ -5,7 +5,7 @@ use std::fmt;
 pub struct SpiralError<'a> {
     pub error_text: &'a str,
     pub help_text: &'a str,
-    pub file: String,
+    pub line_text: String,
     pub line_number: usize,
     pub begin: usize,
     pub end: usize,
@@ -29,18 +29,10 @@ impl<'a> SpiralError<'a> {
             "{}\n\nL{}: {}\n{}\n{}",
             self.error_text.yellow(),
             self.line_number,
-            self.problematic_code(),
+            self.line_text,
             self.error_display().red(),
             self.help_text.green()
         )
-    }
-
-    fn problematic_code(&self) -> String {
-        self.file
-            .lines()
-            .nth(self.line_number - 1)
-            .unwrap()
-            .to_string()
     }
 
     fn error_display(&self) -> String {
